@@ -1,12 +1,13 @@
 #ifndef _GNU_SOURCE
-#define _GNU_SOURCE
+	#define _GNU_SOURCE
 #endif
 #include <stdio.h>
+#include <dlfcn.h>
 #include <stdlib.h>
 #include <signal.h>
 #include <unistd.h>
 #include <string.h>
-#include <dlfcn.h>
+#include <ucontext.h>
 
 /* 纯C环境下，不定义宏NO_CPP_DEMANGLE */
 #if !defined(__cplusplus) && !defined(NO_CPP_DEMANGLE)
@@ -27,25 +28,22 @@
 	#define sigsegv_outp(x, ...) 	fprintf(stderr, x"\n", ##__VA_ARGS__)
 #endif
 
-#if defined(REG_RIP)	/* __x86_64__	*/
-	#define SIGSEGV_STACK_IA64
-	#define REGFORMAT	"%016lx"
-#elif defined(REG_EIP)	/* __i386__		*/
-	#define SIGSEGV_STACK_X86
-	#define REGFORMAT	"%08x"
-#else					/* arm 			*/
-	#define SIGSEGV_STACK_ARM
-	#define REGFORMAT	"%x"
+#if (defined __x86_64__)
+	#define REGFORMAT   "%016lx"	
+#elif (defined __i386__)
+	#define REGFORMAT   "%08x"
+#elif (defined __arm__)
+	#define REGFORMAT   "%lx"
 #endif
 
 static void print_reg(ucontext_t *uc) 
 {
+#if (defined __x86_64__) || (defined __i386__)
 	int i;
-#if defined SIGSEGV_STACK_X86 || defined SIGSEGV_STACK_IA64
 	for (i = 0; i < NGREG; i++) {
 		sigsegv_outp("reg[%02d]: 0x"REGFORMAT, i, uc->uc_mcontext.gregs[i]);
 	}
-#else
+#elif (defined __arm__)
 	sigsegv_outp("reg[%02d]		= 0x"REGFORMAT, 0, uc->uc_mcontext.arm_r0);
 	sigsegv_outp("reg[%02d]		= 0x"REGFORMAT, 1, uc->uc_mcontext.arm_r1);
 	sigsegv_outp("reg[%02d]		= 0x"REGFORMAT, 2, uc->uc_mcontext.arm_r2);
@@ -76,13 +74,13 @@ static void print_call_link(ucontext_t *uc)
 	void **frame_pointer = (void **)NULL;
 	void *return_address = NULL;
 	Dl_info	dl_info = { 0 };
-#if defined SIGSEGV_STACK_X86 
+#if (defined __i386__)
 	frame_pointer = (void **)uc->uc_mcontext.gregs[REG_EBP];
 	return_address = (void *)uc->uc_mcontext.gregs[REG_EIP];
-#elif defined SIGSEGV_STACK_IA64
+#elif (defined __x86_64__)
 	frame_pointer = (void **)uc->uc_mcontext.gregs[REG_RBP];
 	return_address = (void *)uc->uc_mcontext.gregs[REG_RIP];
-#else
+#elif (defined __arm__)
 /* sigcontext_t on ARM:
         unsigned long trap_no;
         unsigned long error_code;
@@ -124,10 +122,10 @@ static void print_call_link(ucontext_t *uc)
 			break;
 		}
 
-#if defined SIGSEGV_STACK_X86 || defined SIGSEGV_STACK_IA64 
+#if (defined __x86_64__) || (defined __i386__)
 		return_address = frame_pointer[1];
 		frame_pointer = frame_pointer[0];
-#else
+#elif (defined __arm__)
 		return_address = frame_pointer[-1];	
 		frame_pointer = frame_pointer[-3];
 #endif
