@@ -1,27 +1,28 @@
 .PHONY: all clean
 
-CC:=arm-hisi-linux-gcc
+#CC:=arm-hisi-linux-gcc
+CC:=gcc
 CFLAGS:=-Wall -g 
 LDFLAGS:=-rdynamic
 LDLIBS:=-ldl
 
-SRCS:=sigsegv.c
-OBJSDIR:=objdir
-OBJS:=$(SRCS:%.c=$(OBJSDIR)/%.o)
+srcs:=sigsegv.c
+objsdir:=objdir
+objs:=$(srcs:%.c=$(objsdir)/%.o)
 
-EXE:=sigsegv
+exe:=sigsegv
 
-all: $(EXE)
+all: $(exe)
 
-$(EXE): $(OBJS)
-	$(CC) $(LDFLAGS) $(LDLIBS) -o $@ $^
+$(exe): $(objs)
+	$(CC) -o $@ $^ $(LDFLAGS) $(LDLIBS)
 
-$(OBJS): | $(OBJSDIR)
-$(OBJSDIR):
+$(objs): | $(objsdir)
+$(objsdir):
 	@mkdir -p $@
 
-$(OBJSDIR)/%.o: %.c
+$(objsdir)/%.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
-	-rm -rf $(EXE) $(OBJSDIR)
+	-rm -rf $(exe) $(objsdir)

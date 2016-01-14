@@ -127,7 +127,7 @@ static void print_call_link(ucontext_t *uc)
 		frame_pointer = frame_pointer[0];
 #elif (defined __arm__)
 		return_address = frame_pointer[-1];	
-		frame_pointer = frame_pointer[-3];
+		frame_pointer = (void **)frame_pointer[-3];
 #endif
 	}
 	sigsegv_outp("Stack trace end.");
