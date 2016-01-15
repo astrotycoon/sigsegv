@@ -9,6 +9,7 @@
 #include <string.h>
 #include <ucontext.h>
 
+
 /* 纯C环境下，不定义宏NO_CPP_DEMANGLE */
 #if !defined(__cplusplus) && !defined(NO_CPP_DEMANGLE)
 #define NO_CPP_DEMANGLE
@@ -74,6 +75,7 @@ static void print_call_link(ucontext_t *uc)
 	void **frame_pointer = (void **)NULL;
 	void *return_address = NULL;
 	Dl_info	dl_info = { 0 };
+
 #if (defined __i386__)
 	frame_pointer = (void **)uc->uc_mcontext.gregs[REG_EBP];
 	return_address = (void *)uc->uc_mcontext.gregs[REG_EIP];
@@ -152,16 +154,27 @@ static void sigsegv_handler(int signo, siginfo_t *info, void *context)
 	_exit(0);
 }
 
+#define SETSIG(sa, sig, fun, flags)     \
+        do {                            \
+            sa.sa_sigaction = fun;      \
+            sa.sa_flags = flags;        \
+            sigemptyset(&sa.sa_mask);   \
+            sigaction(sig, &sa, NULL);  \
+        } while(0)
+
 static void __attribute((constructor)) setup_sigsegv(void) 
 {
 	struct sigaction sa;
 
+	SETSIG(sa, SIGSEGV, sigsegv_handler, SA_SIGINFO); 
+#if 0
 	memset(&sa, 0, sizeof(struct sigaction));
 	sa.sa_sigaction = sigsegv_handler;
 	sa.sa_flags = SA_SIGINFO;
 	if (sigaction(SIGSEGV, &sa, NULL) < 0) {
 		perror("sigaction: ");
 	}
+#endif
 }
 
 #if 1
