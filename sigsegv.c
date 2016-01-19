@@ -10,41 +10,41 @@
 #include <ucontext.h>
 
 
-/* 纯C环境下，不定义宏NO_CPP_DEMANGLE */
-#if !defined(__cplusplus) && !defined(NO_CPP_DEMANGLE)
-#define NO_CPP_DEMANGLE
+/* 纯C环境下，定义宏NO_CPP_DEMANGLE */
+#if (!defined(__cplusplus)) && (!defined(NO_CPP_DEMANGLE))
+# define NO_CPP_DEMANGLE
 #endif
 
 #ifndef NO_CPP_DEMANGLE
-    #include <cxxabi.h>
-    #ifdef __cplusplus
-    	using __cxxabiv1::__cxa_demangle;
-    #endif
+# include <cxxabi.h>
+# ifdef __cplusplus
+	using __cxxabiv1::__cxa_demangle;
+# endif
 #endif
 
-#ifdef HAS_ULSLIB
-	#include <uls/logger.h>
-	#define sigsegv_outp(x)	sigsegv_outp(, gx)
+#if (defined HAS_ULSLIB)
+# include <uls/logger.h>
+# define sigsegv_outp(x)	sigsegv_outp(, gx)
 #else
-	#define sigsegv_outp(x, ...) 	fprintf(stderr, x"\n", ##__VA_ARGS__)
+# define sigsegv_outp(x, ...) 	fprintf(stderr, x"\n", ##__VA_ARGS__)
 #endif
 
-#if (defined __x86_64__)
-	#define REGFORMAT   "%016lx"	
-#elif (defined __i386__)
-	#define REGFORMAT   "%08x"
-#elif (defined __arm__)
-	#define REGFORMAT   "%lx"
+#if (defined (__x86_64__))
+# define REGFORMAT   "%016lx"	
+#elif (defined (__i386__))
+# define REGFORMAT   "%08x"
+#elif (defined (__arm__))
+# define REGFORMAT   "%lx"
 #endif
 
-static void print_reg(ucontext_t *uc) 
+static void print_reg(const ucontext_t *uc) 
 {
-#if (defined __x86_64__) || (defined __i386__)
+#if (defined (__x86_64__)) || (defined (__i386__))
 	int i;
 	for (i = 0; i < NGREG; i++) {
 		sigsegv_outp("reg[%02d]: 0x"REGFORMAT, i, uc->uc_mcontext.gregs[i]);
 	}
-#elif (defined __arm__)
+#elif (defined (__arm__))
 	sigsegv_outp("reg[%02d]		= 0x"REGFORMAT, 0, uc->uc_mcontext.arm_r0);
 	sigsegv_outp("reg[%02d]		= 0x"REGFORMAT, 1, uc->uc_mcontext.arm_r1);
 	sigsegv_outp("reg[%02d]		= 0x"REGFORMAT, 2, uc->uc_mcontext.arm_r2);
@@ -69,20 +69,18 @@ static void print_reg(ucontext_t *uc)
 #endif
 }
 
-static void print_call_link(ucontext_t *uc) 
+static void print_call_link(const ucontext_t *uc) 
 {
 	int i = 0;
-	void **frame_pointer = (void **)NULL;
-	void *return_address = NULL;
-	Dl_info	dl_info = { 0 };
+	Dl_info	dl_info;
 
-#if (defined __i386__)
-	frame_pointer = (void **)uc->uc_mcontext.gregs[REG_EBP];
-	return_address = (void *)uc->uc_mcontext.gregs[REG_EIP];
-#elif (defined __x86_64__)
-	frame_pointer = (void **)uc->uc_mcontext.gregs[REG_RBP];
-	return_address = (void *)uc->uc_mcontext.gregs[REG_RIP];
-#elif (defined __arm__)
+#if (defined (__i386__))
+	const void **frame_pointer = (const void **)uc->uc_mcontext.gregs[REG_EBP];
+	const void *return_address = (const void *)uc->uc_mcontext.gregs[REG_EIP];
+#elif (defined (__x86_64__))
+	const void **frame_pointer = (const void **)uc->uc_mcontext.gregs[REG_RBP];
+	const void *return_address = (const void *)uc->uc_mcontext.gregs[REG_RIP];
+#elif (defined (__arm__))
 /* sigcontext_t on ARM:
         unsigned long trap_no;
         unsigned long error_code;
@@ -98,15 +96,16 @@ static void print_call_link(ucontext_t *uc)
         unsigned long arm_cpsr;
         unsigned long fault_address;
 */
-	frame_pointer = (void **)uc->uc_mcontext.arm_fp;
-	return_address = (void *)uc->uc_mcontext.arm_pc;
+	const void **frame_pointer = (const void **)uc->uc_mcontext.arm_fp;
+	const void *return_address = (const void *)uc->uc_mcontext.arm_pc;
 #endif
 
 	sigsegv_outp("\nStack trace:");
-	while (frame_pointer && return_address) {
-		if (!dladdr(return_address, &dl_info))	break;
+	while (return_address) {
+		memset(&dl_info, 0, sizeof(Dl_info));
+		if (!dladdr((void *)return_address, &dl_info))	break;
 		const char *sname = dl_info.dli_sname;	
-#ifndef NO_CPP_DEMANGLE
+#if (!defined NO_CPP_DEMANGLE)
 		int status;
 		char *tmp = __cxa_demangle(sname, NULL, 0, &status);
 		if (status == 0 && tmp) {
@@ -117,19 +116,18 @@ static void print_call_link(ucontext_t *uc)
 		sigsegv_outp("%02d: %p <%s + %lu> (%s)", ++i, return_address, sname, 
 			(unsigned long)return_address - (unsigned long)dl_info.dli_saddr, 
 													dl_info.dli_fname);
-#ifndef NO_CPP_DEMANGLE
+#if (!defined NO_CPP_DEMANGLE)
 		if (tmp)	free(tmp);
 #endif
-		if (dl_info.dli_sname && !strcmp(dl_info.dli_sname, "main")) {
-			break;
-		}
+		if (dl_info.dli_sname && !strcmp(dl_info.dli_sname, "main")) break;
 
-#if (defined __x86_64__) || (defined __i386__)
+		if (!frame_pointer)	break;
+#if (defined (__x86_64__)) || (defined (__i386__))
 		return_address = frame_pointer[1];
-		frame_pointer = frame_pointer[0];
-#elif (defined __arm__)
+		frame_pointer = (const void **)frame_pointer[0];
+#elif (defined (__arm__))
 		return_address = frame_pointer[-1];	
-		frame_pointer = (void **)frame_pointer[-3];
+		frame_pointer = (const void **)frame_pointer[-3];
 #endif
 	}
 	sigsegv_outp("Stack trace end.");
@@ -137,15 +135,17 @@ static void print_call_link(ucontext_t *uc)
 
 static void sigsegv_handler(int signo, siginfo_t *info, void *context)
 {
-	if (context) {
-		ucontext_t *uc = (ucontext_t *)context;
-
-   		sigsegv_outp("Segmentation Fault!");
-    	sigsegv_outp("info.si_signo = %d", signo);
-    	sigsegv_outp("info.si_errno = %d", info->si_errno);
-    	sigsegv_outp("info.si_code  = %d (%s)", info->si_code, 
+	sigsegv_outp("Segmentation Fault!");
+	sigsegv_outp("info.si_signo = %d", signo);
+	if (info) {
+		sigsegv_outp("info.si_errno = %d", info->si_errno);
+		sigsegv_outp("info.si_code  = %d (%s)", info->si_code, 
 			(info->si_code == SEGV_MAPERR) ? "SEGV_MAPERR" : "SEGV_ACCERR");
-    	sigsegv_outp("info.si_addr  = %p\n", info->si_addr);
+		sigsegv_outp("info.si_addr  = %p\n", info->si_addr);
+	}
+
+	if (context) {
+		const ucontext_t *uc = (const ucontext_t *)context;
 
 		print_reg(uc);
 		print_call_link(uc);
@@ -154,12 +154,12 @@ static void sigsegv_handler(int signo, siginfo_t *info, void *context)
 	_exit(0);
 }
 
-#define SETSIG(sa, sig, fun, flags)     \
+#define SETSIG(sa, signo, func, flags)	\
         do {                            \
-            sa.sa_sigaction = fun;      \
+            sa.sa_sigaction = func;  	\
             sa.sa_flags = flags;        \
             sigemptyset(&sa.sa_mask);   \
-            sigaction(sig, &sa, NULL);  \
+            sigaction(signo, &sa, NULL);\
         } while(0)
 
 static void __attribute((constructor)) setup_sigsegv(void) 

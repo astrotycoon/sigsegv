@@ -1,7 +1,7 @@
 .PHONY: all clean
 
 #CC:=arm-hisi-linux-gcc
-CC:=gcc
+CC:=g++
 CFLAGS:=-Wall -g 
 LDFLAGS:=-rdynamic
 LDLIBS:=-ldl
