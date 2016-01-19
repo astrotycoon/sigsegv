@@ -24,6 +24,7 @@ void show_backtrace (void)
 	while (unw_step(&cursor) > 0) {
 		unw_get_reg(&cursor, UNW_REG_IP, &ip);
 		unw_get_reg(&cursor, UNW_REG_SP, &sp);
+		if (ip == (unw_word_t)0) break;
 
 #if 0
 //		printf ("ip = %lx, sp = %lx\n", (long)ip, (long)sp);
